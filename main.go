@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 )
 
 type apiConfig struct {
@@ -28,6 +27,7 @@ func main() {
 	mux.HandleFunc("/api/reset", apiCfg.handlerReset)
 
 	mux.HandleFunc("POST /api/validate_chirp",handlerChirpsValidate)
+	mux.HandleFunc("POST /api/chirps",handleChirps)
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: mux,
@@ -37,78 +37,49 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-
-func handlerChirpsValidate(w http.ResponseWriter, r *http.Request) {
+func handleChirps(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
 	}
-
-	type valid struct {
-		Cleaned_body string `json:"cleaned_body"`
-	}
-
+	fmt.Println(r.Body)
 	decoder := json.NewDecoder(r.Body)
-	param := parameters{}
-	err := decoder.Decode(&param)
+	params := parameters{}
+	err := decoder.Decode(&params)
 
 	if err != nil {
-	
-			respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
-			return
-		
+
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
+		return
+
 	}
-	const maxLength =140
-	if len(param.Body) > maxLength {
+	const maxLength = 140
+	if len(params.Body) > maxLength {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
 
-	cleaned:= handleClean(param.Body)
+	handleSave(w,http.StatusOK,params.Body)
 
-	respondWithJSON(w, http.StatusOK, valid{
-		Cleaned_body: cleaned,
-	})
 }
 
-func respondWithError(w http.ResponseWriter,statuscode int,val string) {
-	if statuscode > 499 {
-		log.Printf("Responding with 5XX error: %s", val)
+func handleSave(w http.ResponseWriter, code int, payload string) {
+	type newResponse struct {
+		Id int `json:"id"`
+		Body string `json:"body"`
 	}
-	type errorResponse struct {
-		Error string `json:"error"`
+
+	res := newResponse{
+		Id: 1,
+		Body: payload,
 	}
-	respondWithJSON(w, statuscode, errorResponse{
-		Error: val,
-	})
-}
+	encode,err := json.Marshal(res)
 
-
-func respondWithJSON(w http.ResponseWriter, code int, payload any) {
-	w.Header().Set("Content-Type","application/json")
-	
-
-	dat, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("Error marshalling JSON: %s", err)
-		w.WriteHeader(500)
-		return
+		fmt.Println("something went wrong")
 	}
+
+	w.Header().Set("Content-Type","application/json")
 	w.WriteHeader(code)
-
-	w.Write(dat)
+	w.Write(encode)
 }
 
-func handleClean(msg string) string {
-	
-
-	splited := strings.Split(msg," ")
-	for i, v := range splited {
-		
-		if strings.ToLower(v) == "kerfuffle" || strings.ToLower(v) == "sharbert" || strings.ToLower(v) == "fornax" {
-			splited[i] = "****"
-		}
-	}
-	fmt.Println(splited)
-	joined := strings.Join(splited," ")
-	return joined
-}
